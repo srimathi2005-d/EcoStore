@@ -1,6 +1,10 @@
+import dotenv from "dotenv";
+
+// ✅ Load env FIRST before any imports that use env variables
+dotenv.config({ path: "./.env" });
+
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
 import morgan from "morgan";
 
 import connectDB from "./config/db.js";
@@ -17,9 +21,6 @@ import adminStatsRoutes from "./routes/adminStatsRoutes.js";
 import adminOrderRoutes from "./routes/adminOrderRoutes.js";
 import adminUserRoutes from "./routes/adminUserRoutes.js";
 import wishlistroutes from "./routes/wishlistroutes.js";
-
-// ✅ Load env first
-dotenv.config({ path: "./.env" });
 console.log("ENV Loaded:", process.env.RAZORPAY_KEY_ID);
 
 // ✅ Connect DB

@@ -5,16 +5,19 @@ import AdminSidebar from "../../components/admin/AdminSidebar";
 import AdminTopbar from "../../components/admin/AdminTopbar";
 import {
   adminGetAllOrders,
-  adminUpdateOrderStatus
+  adminUpdateOrderStatus,
+  adminUpdatePaymentStatus
 } from "../../services/orderservice";
 import { formatPrice } from "../../utils/formatPrice";
 
 const STATUSES = ["placed", "processing", "shipped", "delivered", "cancelled"];
+const PAYMENT_STATUSES = ["pending", "paid", "failed"];
 
 export default function AdminOrders() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState(null);
+  const [updatingPaymentId, setUpdatingPaymentId] = useState(null);
 
   const load = async () => {
     try {
@@ -44,6 +47,20 @@ export default function AdminOrders() {
       toast.error("Update failed");
     } finally {
       setUpdatingId(null);
+    }
+  };
+
+  const changePaymentStatus = async (orderId, paymentStatus) => {
+    try {
+      setUpdatingPaymentId(orderId);
+      await adminUpdatePaymentStatus(orderId, paymentStatus);
+      toast.success("Payment status updated ✅");
+      load();
+    } catch (err) {
+      console.log(err);
+      toast.error("Payment update failed");
+    } finally {
+      setUpdatingPaymentId(null);
     }
   };
 
@@ -77,7 +94,13 @@ export default function AdminOrders() {
                     </div>
 
                     <div className="flex flex-wrap gap-2 items-center">
-                      <span className="px-3 py-1 rounded-full border text-xs">
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                        order.paymentStatus === "paid" 
+                          ? "bg-green-100 text-green-800" 
+                          : order.paymentStatus === "failed"
+                          ? "bg-red-100 text-red-800"
+                          : "bg-yellow-100 text-yellow-800"
+                      }`}>
                         Payment: {order.paymentStatus || "pending"}
                       </span>
 
@@ -117,34 +140,77 @@ export default function AdminOrders() {
                   </div>
 
                   {/* Status Update */}
-                  <div className="mt-5 flex flex-col md:flex-row md:items-center md:justify-between gap-3 border-t pt-4">
-                    <div className="text-sm text-gray-700">
-                      <p className="font-semibold">
-                        Current Status:{" "}
-                        <span className="capitalize">{order.orderStatus}</span>
-                      </p>
+                  <div className="mt-5 space-y-4 border-t pt-4">
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                      <div className="text-sm text-gray-700">
+                        <p className="font-semibold">
+                          Order Status:{" "}
+                          <span className="capitalize">{order.orderStatus}</span>
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={order.orderStatus}
+                          disabled={updatingId === order._id}
+                          onChange={(e) => changeStatus(order._id, e.target.value)}
+                          className="px-4 py-2 border rounded-xl text-sm"
+                        >
+                          {STATUSES.map((s) => (
+                            <option key={s} value={s}>
+                              {s}
+                            </option>
+                          ))}
+                        </select>
+
+                        {updatingId === order._id && (
+                          <span className="text-xs text-gray-500">
+                            Updating...
+                          </span>
+                        )}
+                      </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={order.orderStatus}
-                        disabled={updatingId === order._id}
-                        onChange={(e) => changeStatus(order._id, e.target.value)}
-                        className="px-4 py-2 border rounded-xl text-sm"
-                      >
-                        {STATUSES.map((s) => (
-                          <option key={s} value={s}>
-                            {s}
-                          </option>
-                        ))}
-                      </select>
+                    {/* Payment Status Update (only for COD) */}
+                    {order.paymentMethod === "COD" && (
+                      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                        <div className="text-sm text-gray-700">
+                          <p className="font-semibold">
+                            Payment Status:{" "}
+                            <span className={`capitalize ${
+                              order.paymentStatus === "paid" 
+                                ? "text-green-600" 
+                                : order.paymentStatus === "failed"
+                                ? "text-red-600"
+                                : "text-yellow-600"
+                            }`}>
+                              {order.paymentStatus || "pending"}
+                            </span>
+                          </p>
+                        </div>
 
-                      {updatingId === order._id && (
-                        <span className="text-xs text-gray-500">
-                          Updating...
-                        </span>
-                      )}
-                    </div>
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={order.paymentStatus || "pending"}
+                            disabled={updatingPaymentId === order._id}
+                            onChange={(e) => changePaymentStatus(order._id, e.target.value)}
+                            className="px-4 py-2 border rounded-xl text-sm"
+                          >
+                            {PAYMENT_STATUSES.map((s) => (
+                              <option key={s} value={s}>
+                                {s}
+                              </option>
+                            ))}
+                          </select>
+
+                          {updatingPaymentId === order._id && (
+                            <span className="text-xs text-gray-500">
+                              Updating...
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Shipping */}

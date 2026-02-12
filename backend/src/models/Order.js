@@ -34,6 +34,8 @@ const orderSchema = new mongoose.Schema(
       default: "pending"
     },
 
+    paidAt: Date,
+
     razorpay: {
       orderId: String,
       paymentId: String,

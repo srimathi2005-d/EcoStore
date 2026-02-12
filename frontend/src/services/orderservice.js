@@ -30,6 +30,12 @@ export const adminUpdateOrderStatus = async (id, orderStatus) => {
   return res.data;
 };
 
+// ✅ admin - update payment status (for COD orders)
+export const adminUpdatePaymentStatus = async (id, paymentStatus) => {
+  const res = await api.put(`/admin/orders/${id}/payment-status`, { paymentStatus });
+  return res.data;
+};
+
 // ✅ admin - get orders (pagination)
 export const adminGetOrders = async ({ page = 1, limit = 5 } = {}) => {
   const res = await api.get(`/admin/orders?page=${page}&limit=${limit}`);

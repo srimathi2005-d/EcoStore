@@ -60,7 +60,22 @@ export default function Navbar() {
             alt="EcoStore Logo"
             className="w-14 h-14 object-contain"
           />
-          <span className="font-bold tracking-wide text-lg">EcoStore</span>
+ <div className="flex flex-col items-center">
+  
+  {/* Brand text */}
+<span
+  style={{ fontFamily: "'Cinzel Decorative', cursive" }}
+  className="uppercase text-1xl font-bold"
+>
+  BOTANICA
+</span>
+
+
+</div>
+
+
+
+
         </Link>
 
         {/* Desktop Links */}

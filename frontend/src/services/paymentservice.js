@@ -1,11 +1,11 @@
-import {api}  from "./api";
+import { api } from "./api";
 
 export const createRazorpayOrder = async (amount) => {
-  const res = await api.post("/payments/razorpay-order", { amount });
+  const res = await api.post("/payments/create-order", { amount });
   return res.data;
 };
 
-export const verifyPayment = async (data) => {
+export const verifyRazorpayPayment = async (data) => {
   const res = await api.post("/payments/verify", data);
   return res.data;
 };

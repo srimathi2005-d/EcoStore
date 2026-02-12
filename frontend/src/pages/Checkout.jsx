@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { useCart } from "../context/CartContext";
 import { createOrder } from "../services/orderservice";
+import { createRazorpayOrder, verifyRazorpayPayment } from "../services/paymentservice";
 import { formatPrice } from "../utils/formatPrice";
 
 export default function Checkout() {
@@ -13,6 +14,7 @@ export default function Checkout() {
   const totalAmount = useMemo(() => subtotal + shippingCharge, [subtotal, shippingCharge]);
 
   const [loading, setLoading] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState("cod");
 
   const [shipping, setShipping] = useState({
     fullName: "",
@@ -23,72 +25,137 @@ export default function Checkout() {
     pincode: ""
   });
 
-  const [paymentMethod, setPaymentMethod] = useState("cod"); // cod now
-
-  const handleChange = (e) => {
+  const handleChange = (e) =>
     setShipping((p) => ({ ...p, [e.target.name]: e.target.value }));
-  };
 
   const validate = () => {
-    if (!shipping.fullName.trim()) return "Enter full name";
-    if (!shipping.phone.trim()) return "Enter phone number";
-    if (!shipping.address.trim()) return "Enter address";
-    if (!shipping.city.trim()) return "Enter city";
-    if (!shipping.state.trim()) return "Enter state";
-    if (!shipping.pincode.trim()) return "Enter pincode";
-
-    if (shipping.phone.length < 10) return "Enter valid phone number";
-    if (shipping.pincode.length < 6) return "Enter valid pincode";
-
+    if (!shipping.fullName) return "Enter full name";
+    if (!shipping.phone || shipping.phone.length < 10) return "Enter valid phone";
+    if (!shipping.address) return "Enter address";
+    if (!shipping.city) return "Enter city";
+    if (!shipping.state) return "Enter state";
+    if (!shipping.pincode || shipping.pincode.length < 6) return "Enter valid pincode";
     if (cart.length === 0) return "Cart is empty";
     return null;
   };
 
+  const basePayload = () => ({
+    items: cart.map((c) => ({
+      product: c.productId,
+      title: c.title,
+      image: c.image,
+      qty: c.qty,
+      price: c.price,
+      size: c.size
+    })),
+    shippingAddress: {
+      fullName: shipping.fullName,
+      phone: shipping.phone,
+      addressLine1: shipping.address,
+      addressLine2: "",
+      city: shipping.city,
+      state: shipping.state,
+      pincode: shipping.pincode,
+      country: "India"
+    },
+    totalAmount
+  });
+
+  // ---------------- COD ----------------
+  const placeCODOrder = async () => {
+    await createOrder({
+      ...basePayload(),
+      paymentMethod: "COD",
+      paymentStatus: "pending"
+    });
+  };
+
+  // 🎯 Handle successful payment and cleanup
+  const handlePaymentSuccess = useCallback(() => {
+    clearCart();
+    navigate("/orders");
+  }, [clearCart, navigate]);
+
+  // ---------------- RAZORPAY ----------------
+  const placeRazorpayOrder = async () => {
+    try {
+      // Step 1: Create MongoDB order FIRST with pending payment status
+      const dbOrder = await createOrder({
+        ...basePayload(),
+        paymentMethod: "RAZORPAY",
+        paymentStatus: "pending"
+      });
+
+      // Step 2: Create Razorpay order
+      const razorpayOrder = await createRazorpayOrder(totalAmount);
+
+      const options = {
+        key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+        amount: razorpayOrder.amount,
+        currency: "INR",
+        name: "EcoStore",
+        description: "Order Payment",
+        order_id: razorpayOrder.id,
+        handler: async (response) => {
+          try {
+            // Step 3: Verify payment and pass MongoDB order ID
+            const verify = await verifyRazorpayPayment({
+              ...response,
+              orderId: dbOrder._id  // ✅ Pass the MongoDB order ID
+            });
+
+            if (!verify.success) {
+              toast.error("Payment verification failed");
+              return;
+            }
+
+            toast.success("Payment successful ✅");
+            // Defer state updates to next tick to avoid React warning
+            setTimeout(() => {
+              handlePaymentSuccess();
+            }, 0);
+          } catch (err) {
+            console.log("Verification error:", err);
+            toast.error("Payment verification failed");
+          }
+        },
+        modal: {
+          ondismiss: () => {
+            toast.error("Payment cancelled. Order remains pending.");
+          }
+        },
+        theme: { color: "#000000" }
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.open();
+    } catch (err) {
+      console.log(err);
+      toast.error("Failed to initiate payment");
+      setLoading(false);
+    }
+  };
+
+  // ---------------- SUBMIT ----------------
   const handlePlaceOrder = async (e) => {
     e.preventDefault();
 
     const error = validate();
-    if (error) {
-      toast.error(error);
-      return;
-    }
+    if (error) return toast.error(error);
 
     try {
       setLoading(true);
 
-     const payload = {
-  items: cart.map((c) => ({
-    product: c.productId,     // ✅ schema expects product
-    title: c.title,
-    image: c.image,
-    qty: c.qty,
-    price: c.price,
-    size: c.size
-  })),
-
-  shippingAddress: {
-    fullName: shipping.fullName,
-    phone: shipping.phone,
-    addressLine1: shipping.address, // ✅ schema expects addressLine1
-    addressLine2: "",
-    city: shipping.city,
-    state: shipping.state,
-    pincode: shipping.pincode,
-    country: "India"
-  },
-
-  paymentMethod: "COD",   // ✅ must be "COD" not "cod"
-  totalAmount: totalAmount
-};
-
-      await createOrder(payload);
-
-      toast.success("Order placed ✅");
-      clearCart();
-      navigate("/orders");
+      if (paymentMethod === "cod") {
+        await placeCODOrder();
+        toast.success("Order placed ✅");
+        clearCart();
+        navigate("/orders");
+      } else {
+        await placeRazorpayOrder();
+      }
     } catch (err) {
-      console.log(err);
-      toast.error(err?.response?.data?.message || "Order failed");
+      toast.error("Order failed");
     } finally {
       setLoading(false);
     }
@@ -106,165 +173,77 @@ export default function Checkout() {
   return (
     <div className="max-w-7xl mx-auto px-4 py-10">
       <h1 className="text-3xl font-semibold">Checkout</h1>
-      <p className="text-sm text-gray-600 mt-1">
-        Fill shipping details and place your order.
-      </p>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-8">
-        {/* Shipping Form */}
+        {/* FORM */}
         <form
           onSubmit={handlePlaceOrder}
           className="md:col-span-2 border rounded-2xl p-6 bg-white space-y-4"
         >
           <h2 className="text-lg font-semibold">Shipping Address</h2>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm text-gray-600">Full Name</label>
-              <input
-                name="fullName"
-                value={shipping.fullName}
-                onChange={handleChange}
-                className="w-full mt-1 px-4 py-3 border rounded-xl outline-none"
-                placeholder="Enter name"
-              />
-            </div>
-
-            <div>
-              <label className="text-sm text-gray-600">Phone</label>
-              <input
-                name="phone"
-                value={shipping.phone}
-                onChange={handleChange}
-                className="w-full mt-1 px-4 py-3 border rounded-xl outline-none"
-                placeholder="Enter phone"
-              />
-            </div>
+          <input name="fullName" placeholder="Full Name" onChange={handleChange}
+            className="w-full px-4 py-3 border rounded-xl" />
+          <input name="phone" placeholder="Phone" onChange={handleChange}
+            className="w-full px-4 py-3 border rounded-xl" />
+          <textarea name="address" placeholder="Address" rows="3"
+            onChange={handleChange} className="w-full px-4 py-3 border rounded-xl" />
+          <div className="grid grid-cols-3 gap-3">
+            <input name="city" placeholder="City" onChange={handleChange}
+              className="px-4 py-3 border rounded-xl" />
+            <input name="state" placeholder="State" onChange={handleChange}
+              className="px-4 py-3 border rounded-xl" />
+            <input name="pincode" placeholder="Pincode" onChange={handleChange}
+              className="px-4 py-3 border rounded-xl" />
           </div>
 
-          <div>
-            <label className="text-sm text-gray-600">Address</label>
-            <textarea
-              name="address"
-              value={shipping.address}
-              onChange={handleChange}
-              className="w-full mt-1 px-4 py-3 border rounded-xl outline-none"
-              placeholder="House no, street, area"
-              rows={3}
-            />
+          <h2 className="text-lg font-semibold pt-3">Payment Method</h2>
+          <div className="flex gap-3">
+            <button type="button"
+              onClick={() => setPaymentMethod("cod")}
+              className={`px-4 py-2 rounded-xl border ${
+                paymentMethod === "cod" ? "bg-black text-white" : ""
+              }`}>
+              Cash on Delivery
+            </button>
+
+            <button type="button"
+              onClick={() => setPaymentMethod("razorpay")}
+              className={`px-4 py-2 rounded-xl border ${
+                paymentMethod === "razorpay" ? "bg-black text-white" : ""
+              }`}>
+              Razorpay
+            </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="text-sm text-gray-600">City</label>
-              <input
-                name="city"
-                value={shipping.city}
-                onChange={handleChange}
-                className="w-full mt-1 px-4 py-3 border rounded-xl outline-none"
-                placeholder="City"
-              />
-            </div>
-
-            <div>
-              <label className="text-sm text-gray-600">State</label>
-              <input
-                name="state"
-                value={shipping.state}
-                onChange={handleChange}
-                className="w-full mt-1 px-4 py-3 border rounded-xl outline-none"
-                placeholder="State"
-              />
-            </div>
-
-            <div>
-              <label className="text-sm text-gray-600">Pincode</label>
-              <input
-                name="pincode"
-                value={shipping.pincode}
-                onChange={handleChange}
-                className="w-full mt-1 px-4 py-3 border rounded-xl outline-none"
-                placeholder="Pincode"
-              />
-            </div>
-          </div>
-
-          {/* Payment */}
-          <div className="pt-3">
-            <h2 className="text-lg font-semibold">Payment Method</h2>
-
-            <div className="mt-3 flex gap-3">
-              <button
-                type="button"
-                onClick={() => setPaymentMethod("cod")}
-                className={`px-4 py-2 rounded-xl border text-sm ${
-                  paymentMethod === "cod"
-                    ? "bg-black text-white border-black"
-                    : "hover:bg-gray-50"
-                }`}
-              >
-                Cash on Delivery
-              </button>
-
-              <button
-                type="button"
-                disabled
-                className="px-4 py-2 rounded-xl border text-sm opacity-50 cursor-not-allowed"
-              >
-                Razorpay (Next)
-              </button>
-            </div>
-          </div>
-
-          <button
-            disabled={loading}
-            className="w-full mt-4 py-3 rounded-2xl bg-black text-white font-medium hover:opacity-90 disabled:opacity-60"
-          >
-            {loading ? "Placing order..." : "Place Order"}
+          <button disabled={loading}
+            className="w-full mt-4 py-3 rounded-2xl bg-black text-white">
+            {loading ? "Processing..." : "Place Order"}
           </button>
         </form>
 
-        {/* Summary */}
-        <div className="md:col-span-1 border rounded-2xl p-6 bg-white h-fit sticky top-6">
+        {/* SUMMARY */}
+        <div className="border rounded-2xl p-6 bg-white h-fit">
           <h2 className="text-lg font-semibold">Order Summary</h2>
-
           <div className="mt-4 space-y-3">
-            {cart.map((item) => (
-              <div key={item.productId + item.size} className="flex gap-3">
-                <img
-                  src={item.image}
-                  alt={item.title}
-                  className="w-14 h-14 object-cover rounded-xl border"
-                />
-
-                <div className="flex-1">
-                  <p className="text-sm font-medium">{item.title}</p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Qty: {item.qty} {item.size ? `• Size: ${item.size}` : ""}
-                  </p>
-                </div>
-
-                <p className="text-sm font-semibold">
-                  {formatPrice(item.price * item.qty)}
-                </p>
+            {cart.map((i) => (
+              <div key={i.productId} className="flex justify-between text-sm">
+                <span>{i.title} × {i.qty}</span>
+                <span>{formatPrice(i.price * i.qty)}</span>
               </div>
             ))}
           </div>
 
-          <div className="mt-6 text-sm text-gray-700 space-y-2 border-t pt-4">
+          <div className="mt-4 border-t pt-4 text-sm space-y-2">
             <div className="flex justify-between">
-              <span>Subtotal</span>
-              <span>{formatPrice(subtotal)}</span>
+              <span>Subtotal</span><span>{formatPrice(subtotal)}</span>
             </div>
-
             <div className="flex justify-between">
               <span>Shipping</span>
               <span>{shippingCharge === 0 ? "FREE" : formatPrice(shippingCharge)}</span>
             </div>
-
-            <div className="flex justify-between font-bold text-base text-gray-900 pt-2 border-t">
-              <span>Total</span>
-              <span>{formatPrice(totalAmount)}</span>
+            <div className="flex justify-between font-bold">
+              <span>Total</span><span>{formatPrice(totalAmount)}</span>
             </div>
           </div>
         </div>

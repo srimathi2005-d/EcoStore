@@ -49,7 +49,7 @@ export default function Login() {
       <div className="border rounded-2xl p-6 bg-white">
         <h1 className="text-3xl font-semibold">Login</h1>
         <p className="text-gray-600 text-sm mt-1">
-          Welcome back 👋 Please login to continue.
+          Welcome back! Please login to continue.
         </p>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">

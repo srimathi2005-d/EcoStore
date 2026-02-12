@@ -157,12 +157,12 @@ export default function ProductDetails() {
                   : "hover:bg-gray-50"
               }`}
             >
-              {wished ? "Wishlisted 🩵" : "Wishlist"}
+              {wished ? "Wishlisted" : "Wishlist"}
             </button>
           </div>
 
           <div className="mt-8 border-t pt-5 text-sm text-gray-600">
-            <p>✅ 100% Eco-friendly materials</p>
+            <p>100% User friendly materials</p>
             <p className="mt-1">🚚 Delivery in 3–7 days</p>
           </div>
         </div>

@@ -27,7 +27,7 @@ export function WishlistProvider({ children }) {
     const pid = product?._id;
     if (!pid) return;
 
-    if (isWishlisted(pid)) return toast("Already in wishlist 💛");
+    if (isWishlisted(pid)) return toast("Already in wishlist");
 
     const item = {
       productId: pid,
@@ -42,7 +42,7 @@ export function WishlistProvider({ children }) {
     const updated = [item, ...wishlist];
     setWishlist(updated);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-    toast.success("Added to wishlist 💛");
+    toast.success("Added to wishlist");
   };
 
   const removeFromWishlist = (productId) => {

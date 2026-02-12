@@ -41,7 +41,7 @@ export default function Orders() {
         <div className="mt-10 text-gray-600">
           <p>No orders found.</p>
           <p className="text-sm mt-2">
-            Add items to cart and checkout to create orders ✅
+            Add items to cart and checkout to create orders✅
           </p>
         </div>
       ) : (
@@ -59,7 +59,13 @@ export default function Orders() {
                 </div>
 
                 <div className="flex gap-3 flex-wrap">
-                  <span className="px-3 py-1 rounded-full text-xs border">
+                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                    order.paymentStatus === "paid" 
+                      ? "bg-green-100 text-green-800" 
+                      : order.paymentStatus === "failed"
+                      ? "bg-red-100 text-red-800"
+                      : "bg-yellow-100 text-yellow-800"
+                  }`}>
                     Payment: {order.paymentStatus || "pending"}
                   </span>
                   <span className="px-3 py-1 rounded-full text-xs border">

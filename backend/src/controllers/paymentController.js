@@ -4,25 +4,32 @@ import Order from "../models/Order.js";
 
 let razorpay = null;
 
-// ✅ Do not crash backend if keys missing
-if (process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET) {
-  razorpay = new Razorpay({
-    key_id: process.env.RAZORPAY_KEY_ID,
-    key_secret: process.env.RAZORPAY_KEY_SECRET
-  });
-} else {
-  console.log("⚠️ Razorpay keys missing in .env. Payment routes disabled until added.");
-}
+// Lazy initialization - ensures env vars are loaded
+const getRazorpay = () => {
+  if (!razorpay && process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET) {
+    razorpay = new Razorpay({
+      key_id: process.env.RAZORPAY_KEY_ID,
+      key_secret: process.env.RAZORPAY_KEY_SECRET
+    });
+  }
+  return razorpay;
+};
 
 export const createRazorpayOrder = async (req, res) => {
   try {
-    if (!razorpay) {
+    const razorpayInstance = getRazorpay();
+    
+    if (!razorpayInstance) {
       return res.status(500).json({ message: "Razorpay keys missing in .env" });
     }
 
     const { amount } = req.body;
 
-    const order = await razorpay.orders.create({
+    if (!amount) {
+      return res.status(400).json({ message: "Amount is required" });
+    }
+
+    const order = await razorpayInstance.orders.create({
       amount: Math.round(amount * 100),
       currency: "INR",
       receipt: "eco_" + Date.now()
@@ -30,7 +37,11 @@ export const createRazorpayOrder = async (req, res) => {
 
     res.json(order);
   } catch (error) {
-    res.status(500).json({ message: "Razorpay order create failed" });
+    console.log("❌ Razorpay order creation error:", error.message);
+    res.status(500).json({ 
+      message: "Razorpay order create failed",
+      error: error.message 
+    });
   }
 };
 
@@ -52,7 +63,10 @@ export const verifyRazorpayPayment = async (req, res) => {
     const order = await Order.findById(orderId);
     if (!order) return res.status(404).json({ message: "Order not found" });
 
+    // Update payment as paid immediately after Razorpay verification
     order.paymentStatus = "paid";
+    order.paidAt = new Date();
+    order.orderStatus = "placed";
     order.razorpay = {
       orderId: razorpay_order_id,
       paymentId: razorpay_payment_id,
