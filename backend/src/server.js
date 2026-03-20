@@ -31,6 +31,7 @@ const app = express();
 
 // ✅ CORS AFTER app created
 const allowedOrigins = [
+  "https://eco-store-silk.vercel.app",  
   process.env.CLIENT_URL || "http://localhost:5173",
   process.env.FRONTEND_URL,
   "http://localhost:3000",

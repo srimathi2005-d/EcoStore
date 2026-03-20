@@ -1,12 +1,12 @@
 {
   "name": "eco-store-backend",
   "version": "1.0.0",
-  "main": "src/server.js",
+  "main": "server.js",
   "type": "module",
   "scripts": {
-    "dev": "nodemon src/server.js",
-    "start": "node src/server.js",
-    "seed": "node src/seed/seedProduct.js"
+    "dev": "nodemon server.js",
+    "start": "node server.js",
+    "seed": "node seed/seedProduct.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
